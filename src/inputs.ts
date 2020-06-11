@@ -5,6 +5,7 @@ export interface Inputs {
   publishDir(): string
   deployMessage(): string | undefined
   productionBranch(): string | undefined
+  deployProduction(): boolean
   enablePullRequestComment(): boolean
   enableCommitComment(): boolean
   githubToken(): string
@@ -21,6 +22,9 @@ export const defaultInputs: Inputs = {
   },
   productionBranch() {
     return core.getInput('production-branch') || undefined
+  },
+  deployProduction(): boolean {
+    return core.getInput('production-deploy') === 'true'
   },
   enablePullRequestComment() {
     // Default: true

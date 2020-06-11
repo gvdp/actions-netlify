@@ -70,9 +70,9 @@ async function run(inputs: Inputs): Promise<void> {
     const enableCommitComment: boolean = inputs.enableCommitComment()
     const overwritesPullRequestComment: boolean = inputs.overwritesPullRequestComment()
     const netlifyConfigPath: string | undefined = inputs.netlifyConfigPath()
-    const isDraft: boolean =
-      productionBranch === undefined ||
-      context.ref !== `refs/heads/${productionBranch}`
+
+    const branchMatchesProduction: boolean = !!productionBranch && context.ref == `refs/heads/${productionBranch}`
+    const productionDeploy = branchMatchesProduction || inputs.deployProduction()
 
     // Create Netlify API client
     const netlifyClient = new NetlifyAPI(netlifyAuthToken)
@@ -80,22 +80,20 @@ async function run(inputs: Inputs): Promise<void> {
     const deployFolder = path.resolve(process.cwd(), dir)
     // Deploy to Netlify
     const deploy = await netlifyClient.deploy(siteId, deployFolder, {
-      draft: isDraft,
+      draft: !productionDeploy,
       message: deployMessage,
       configPath: netlifyConfigPath
     })
     // Create a message
-    const message = isDraft
-      ? `🚀 Deployed on ${deploy.deploy.deploy_ssl_url}`
-      : `🎉 Published on ${deploy.deploy.ssl_url} as production\n🚀 Deployed on ${deploy.deploy.deploy_ssl_url}`
+    const message = productionDeploy
+      ? `🎉 Published on ${deploy.deploy.ssl_url} as production\n🚀 Deployed on ${deploy.deploy.deploy_ssl_url}`
+      : `🚀 Deployed on ${deploy.deploy.deploy_ssl_url}`
     // Print the URL
     process.stdout.write(`${message}\n`)
 
     // Set the deploy URL to outputs for GitHub Actions
-    core.setOutput(
-      'deploy-url',
-      isDraft ? deploy.deploy.deploy_ssl_url : deploy.deploy.ssl_url
-    )
+    const deployUrl = productionDeploy ? deploy.deploy.ssl_url : deploy.deploy.deploy_ssl_url
+    core.setOutput('deploy-url', deployUrl)
 
     // Get GitHub token
     const githubToken = inputs.githubToken()
@@ -126,14 +124,11 @@ async function run(inputs: Inputs): Promise<void> {
 
       if (context.issue.number === undefined) {
         try {
-          const environmentUrl = isDraft
-            ? deploy.deploy.deploy_ssl_url
-            : deploy.deploy.ssl_url
-          const environment = isDraft ? 'commit' : 'production'
+          const environment = productionDeploy ? 'production' : 'commit'
           // Create GitHub Deployment
           await createGitHubDeployment(
             githubClient,
-            environmentUrl,
+            deployUrl,
             environment
           )
         } catch (err) {
